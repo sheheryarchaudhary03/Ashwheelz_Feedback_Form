@@ -1,6 +1,7 @@
 """Ashwheelz feedback server: public form, admin dashboard and JSON API."""
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -8,10 +9,12 @@ from urllib.parse import urlparse
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from . import auth, ratelimit, repository
@@ -26,13 +29,41 @@ log = logging.getLogger("ashwheelz")
 STATIC = Path(__file__).resolve().parent / "static"
 
 
+# Start-up (migrations, pool, first admin) runs once per instance. If it fails,
+# e.g. the database is unreachable, pages answer 503 with the reason and the
+# next request tries again instead of the whole function crashing.
+_ready = False
+_ready_lock = threading.Lock()
+
+
+def ensure_ready() -> str | None:
+    """Initialise if needed. Returns None when ready, else a message for the visitor."""
+    global _ready
+    if _ready:
+        return None
+    with _ready_lock:
+        if _ready:
+            return None
+        try:
+            run_migrations()
+            pool.open(wait=True, timeout=15)
+            auth.ensure_default_admin()
+        except psycopg.OperationalError:
+            log.exception("Cannot connect to the database")
+            return "Cannot connect to the database. Check DATABASE_URL in the hosting settings."
+        except Exception:
+            log.exception("Start-up failed")
+            return "The server could not start. Details are in the server logs."
+        _ready = True
+        return None
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    run_migrations()
-    pool.open(wait=True)
-    auth.ensure_default_admin()
+    await run_in_threadpool(ensure_ready)
     yield
-    pool.close()
+    if _ready:
+        pool.close()
 
 
 app = FastAPI(title="Ashwheelz Feedback", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -47,6 +78,13 @@ CSP = (
 
 @app.middleware("http")
 async def security(request: Request, call_next):
+    if not request.url.path.startswith("/static/"):
+        problem = await run_in_threadpool(ensure_ready)
+        if problem:
+            return PlainTextResponse(
+                "Ashwheelz feedback is temporarily unavailable.\n\n" + problem, status_code=503,
+                headers={"Retry-After": "30", "Cache-Control": "no-store"},
+            )
     # Admin writes must come from this site (defence in depth on top of SameSite=Strict).
     if request.url.path.startswith("/api/admin") and request.method not in ("GET", "HEAD", "OPTIONS"):
         origin = request.headers.get("origin")

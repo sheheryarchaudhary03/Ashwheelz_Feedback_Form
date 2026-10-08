@@ -1,0 +1,18 @@
+[project]
+name = "ashwheelz-feedback"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.142.4",
+    "uvicorn[standard]==0.54.0",
+    "psycopg[binary]==3.3.6",
+    "psycopg-pool==3.3.3",
+    "pydantic==2.13.5",
+    "openpyxl==3.1.5",
+    "bcrypt==5.0.0",
+    "tzdata>=2025.2",
+]
+
+[tool.vercel]
+# Load the app as a package from the project root, so app/*.py imports resolve.
+entrypoint = "index:app"
