@@ -1,0 +1,31 @@
+# Local run with Docker:  docker compose up --build   then open http://localhost:8000
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ashwheelz
+      POSTGRES_PASSWORD: ashwheelz-local
+      POSTGRES_DB: ashwheelz
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ashwheelz"]
+      interval: 3s
+      retries: 20
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://ashwheelz:ashwheelz-local@db:5432/ashwheelz
+      SECRET_KEY: local-docker-only
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: "1234"
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

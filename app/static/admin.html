@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Ashwheelz Admin</title>
+<link rel="icon" href="/static/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito+Sans:wght@400;600;700&display=swap">
+<style>
+  /* Layout: top bar, KPI strip, filter bar, results table; a side drawer opens one response. */
+  :root {
+    --orange: #F28A1C; --orange-soft: #FDEBD7; --ink: #262422; --muted: #6E6862;
+    --line: #E6DFD7; --card: #FFFFFF; --bg: #F6F3EF; --star-off: #D9D2CA;
+    --good: #2E8B57; --good-soft: #E1F2E8; --warn: #B7791F; --warn-soft: #FBF0D9;
+    --bad: #C0392B; --bad-soft: #F9E1DE; --info: #2F6FB3; --info-soft: #E2ECF7;
+    --display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+    --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --orange: #FF9D3A; --orange-soft: #3A2A1A; --ink: #F1ECE6; --muted: #B3AAA1;
+      --line: #3A3531; --card: #221F1C; --bg: #171513; --star-off: #4A443F;
+      --good: #5CC48A; --good-soft: #17301F; --warn: #E3B04B; --warn-soft: #33290F;
+      --bad: #FF7B6B; --bad-soft: #3A1C18; --info: #7DB3F0; --info-soft: #172739;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+  button, input, select { font: inherit; color: inherit; }
+  h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.2; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+  .btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .btn:hover { border-color: var(--orange); }
+  .btn.primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.05); }
+  .btn:disabled { opacity: .6; cursor: wait; }
+  .btn.link { border: 0; background: none; padding: 6px 8px; color: var(--muted); }
+  .btn.link:hover { color: var(--ink); }
+  input[type=text], input[type=password], input[type=search], input[type=date], select {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0;
+  }
+  .err { color: var(--bad); font-size: 14px; min-height: 1.3em; }
+
+  /* login */
+  .login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+  .login form { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
+  .login img { width: 110px; align-self: center; border-radius: 12px; background: #fff; padding: 4px; }
+  .login h1 { font-size: 24px; text-align: center; }
+  .login label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+
+  /* app shell */
+  .top { position: sticky; top: 0; z-index: 5; background: var(--card); border-bottom: 1px solid var(--line); }
+  .top-in { max-width: 1280px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .top img { width: 40px; height: 40px; border-radius: 8px; background: #fff; padding: 2px; }
+  .top h1 { font-size: 20px; flex: 1; min-width: 160px; }
+  .who { color: var(--muted); font-size: 14px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; display: flex; flex-direction: column; gap: 18px; }
+
+  .banner { background: var(--warn-soft); color: var(--ink); border: 1px solid var(--warn); border-radius: 12px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .banner strong { color: var(--warn); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .kpi .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+  .kpi .val { font: 700 30px/1.1 var(--display); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 13px; color: var(--muted); }
+  .kpi .val.bad { color: var(--bad); }
+
+  .filters { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .filters .grow { flex: 1 1 220px; }
+  .filters .grow input { width: 100%; }
+  .filters .actions { display: flex; gap: 8px; margin-left: auto; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; min-width: 0; }
+  .panel-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-h h2 { font-size: 17px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--orange-soft); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cust { font-weight: 700; }
+  .subtle { color: var(--muted); font-size: 13px; }
+  .stars-s { color: var(--orange); letter-spacing: 1px; white-space: nowrap; }
+  .stars-s .off { color: var(--star-off); }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .pill.new { background: var(--info-soft); color: var(--info); }
+  .pill.reviewed { background: var(--warn-soft); color: var(--warn); }
+  .pill.actioned { background: var(--good-soft); color: var(--good); }
+  .pill.archived { background: var(--bg); color: var(--muted); }
+  .empty { padding: 40px 16px; text-align: center; color: var(--muted); }
+  .pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
+
+  .bars { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .bar-row { font-size: 13px; }
+  .bar-row .t { display: flex; justify-content: space-between; gap: 8px; }
+  .bar-row .t b { font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; background: var(--bg); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--orange); border-radius: 3px; }
+  .bar i.low { background: var(--bad); }
+
+  /* drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--card); z-index: 21; display: flex; flex-direction: column; box-shadow: -8px 0 30px rgba(0,0,0,.15); }
+  .drawer-h { padding: 16px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: start; }
+  .drawer-h h2 { font-size: 20px; flex: 1; }
+  .drawer-b { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; overflow-wrap: anywhere; }
+  .sec-t { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--orange); margin-top: 6px; }
+  .ans { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+  .ans .p { font-weight: 700; }
+  .ans .v { margin-top: 2px; }
+  .ans .s { margin-top: 6px; background: var(--bg); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ans.blank .v { color: var(--muted); }
+
+  dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); padding: 24px; width: min(400px, calc(100% - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog form { display: flex; flex-direction: column; gap: 12px; }
+  dialog label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+  .row-end { display: flex; justify-content: flex-end; gap: 8px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 10px; z-index: 30; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<section class="login" id="loginView" hidden>
+  <form id="loginForm" novalidate>
+    <img src="/static/logo.webp" alt="Ashwheelz">
+    <h1>Feedback admin</h1>
+    <label>Username <input type="text" id="lu" autocomplete="username" required></label>
+    <label>Password <input type="password" id="lp" autocomplete="current-password" required></label>
+    <div class="err" id="loginErr" role="alert"></div>
+    <button class="btn primary" type="submit" id="loginBtn">Sign in</button>
+  </form>
+</section>
+
+<div id="appView" hidden>
+  <header class="top">
+    <div class="top-in">
+      <img src="/static/logo.webp" alt="">
+      <h1>Customer feedback</h1>
+      <span class="who" id="who"></span>
+      <button class="btn link" type="button" id="pwBtn">Change password</button>
+      <button class="btn" type="button" id="logoutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="banner" id="pwBanner" hidden>
+      <span><strong>Default password in use.</strong> Anyone who knows "1234" can read all customer feedback.</span>
+      <button class="btn" type="button" id="pwBanBtn">Change it now</button>
+    </div>
+
+    <div class="kpis" id="kpis">
+      <div class="kpi"><div class="lbl">Responses</div><div class="val" id="kTotal">–</div><div class="sub" id="kNew">&nbsp;</div></div>
+      <div class="kpi"><div class="lbl">Average overall</div><div class="val" id="kAvg">–</div><div class="sub">out of 5 stars</div></div>
+      <div class="kpi"><div class="lbl">Net Promoter Score</div><div class="val" id="kNps">–</div><div class="sub" id="kNpsN">&nbsp;</div></div>
+      <div class="kpi"><div class="lbl">Rated 1–2 stars</div><div class="val" id="kLow">–</div><div class="sub">need follow-up</div></div>
+    </div>
+
+    <form class="filters" id="filters">
+      <label class="grow">Search
+        <input type="search" id="fq" placeholder="Name, phone, email, reference or comment" maxlength="100"></label>
+      <label>From <input type="date" id="ffrom"></label>
+      <label>To <input type="date" id="fto"></label>
+      <label>Service <select id="fservice"><option value="">All services</option></select></label>
+      <label>Overall rating
+        <select id="frating">
+          <option value="">Any rating</option>
+          <option value="5-5">5 stars</option>
+          <option value="4-5">4–5 stars</option>
+          <option value="3-3">3 stars</option>
+          <option value="1-2">1–2 stars</option>
+        </select></label>
+      <label>Status
+        <select id="fstatus">
+          <option value="">Any status</option>
+          <option value="new">New</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="actioned">Actioned</option>
+          <option value="archived">Archived</option>
+        </select></label>
+      <div class="actions">
+        <button class="btn" type="button" id="resetBtn">Reset</button>
+        <button class="btn primary" type="button" id="exportBtn">Export to Excel</button>
+      </div>
+    </form>
+
+    <div class="layout">
+      <section class="panel">
+        <div class="panel-h">
+          <h2 id="resultTitle">Responses</h2>
+          <label class="subtle">Sort
+            <select id="sort">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="rating_low">Lowest rating first</option>
+              <option value="rating_high">Highest rating first</option>
+            </select></label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Submitted</th><th>Customer</th><th>Service</th><th>Overall</th><th>NPS</th><th>Comments</th><th>Status</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="empty" hidden>No feedback matches these filters yet. Share the form link with customers and responses will appear here.</div>
+        <div class="pager">
+          <span class="subtle" id="pageInfo"></span>
+          <span>
+            <button class="btn" type="button" id="prevBtn">Previous</button>
+            <button class="btn" type="button" id="nextBtn">Next</button>
+          </span>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-h"><h2>Scores by question</h2></div>
+        <div class="bars" id="bars"></div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="dTitle">
+  <div class="drawer-h">
+    <div style="flex:1;min-width:0">
+      <h2 id="dTitle"></h2>
+      <div class="subtle" id="dSub"></div>
+    </div>
+    <button class="btn" type="button" id="dClose">Close</button>
+  </div>
+  <div class="drawer-b" id="dBody"></div>
+</aside>
+
+<dialog id="pwDialog">
+  <form id="pwForm" novalidate>
+    <h2>Change password</h2>
+    <label>Current password <input type="password" id="pwCur" autocomplete="current-password" required></label>
+    <label>New password <input type="password" id="pwNew" autocomplete="new-password" minlength="8" maxlength="72" required></label>
+    <span class="subtle">At least 8 characters, with letters and numbers.</span>
+    <div class="err" id="pwErr" role="alert"></div>
+    <div class="row-end">
+      <button class="btn" type="button" id="pwCancel">Cancel</button>
+      <button class="btn primary" type="submit">Save password</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/static/admin.js"></script>
+</body>
+</html>
