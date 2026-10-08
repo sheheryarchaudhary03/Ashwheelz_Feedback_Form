@@ -14,7 +14,7 @@ if not TEST_DB:
     pytest.skip("TEST_DATABASE_URL is not set", allow_module_level=True)
 
 os.environ.update(DATABASE_URL=TEST_DB, COOKIE_SECURE="false", ADMIN_USERNAME="admin",
-                  ADMIN_PASSWORD="1234", SECRET_KEY="test-secret")
+                  ADMIN_PASSWORD="1234", SECRET_KEY="test-secret-key-0123456789")
 
 with psycopg.connect(TEST_DB, autocommit=True) as _c:
     _c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
@@ -22,7 +22,7 @@ with psycopg.connect(TEST_DB, autocommit=True) as _c:
 from fastapi.testclient import TestClient  # noqa: E402
 from openpyxl import load_workbook  # noqa: E402
 
-from app import auth, main  # noqa: E402
+from app import main  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -31,9 +31,14 @@ def client():
         yield c
 
 
+def clear_limits():
+    with psycopg.connect(TEST_DB, autocommit=True) as c:
+        c.execute("DELETE FROM rate_limit_hits")
+
+
 @pytest.fixture(autouse=True)
-def _reset_submit_limit():
-    main.submit_limit.hits.clear()
+def _reset_limits(client):
+    clear_limits()
 
 
 def test_submit_rate_limit(client):
@@ -61,7 +66,7 @@ def good_payload(**over):
 
 
 def login(client, password="1234"):
-    auth.login_throttle.reset("testclient")
+    clear_limits()
     return client.post("/api/admin/login", json={"username": "admin", "password": password})
 
 
@@ -127,11 +132,11 @@ def test_admin_requires_login(client):
 
 def test_wrong_password_then_lockout(client):
     client.cookies.clear()
-    auth.login_throttle.reset("testclient")
+    clear_limits()
     for _ in range(5):
         assert client.post("/api/admin/login", json={"username": "admin", "password": "nope"}).status_code == 401
     assert client.post("/api/admin/login", json={"username": "admin", "password": "1234"}).status_code == 429
-    auth.login_throttle.reset("testclient")
+    clear_limits()
 
 
 def test_password_is_hashed(client):

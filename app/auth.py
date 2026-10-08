@@ -3,9 +3,6 @@ import hashlib
 import ipaddress
 import logging
 import secrets
-import threading
-import time
-from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -57,46 +54,6 @@ def ensure_default_admin() -> None:
             "The admin password is the default '1234'. Change it from the dashboard "
             "(Change password) before sharing the site."
         )
-
-
-# ----------------------------------------------------------------- throttle
-class LoginThrottle:
-    """Blocks an IP after too many failed logins inside a time window.
-
-    In-memory, so it applies per app instance; that is enough for a single
-    server. Put a shared store (e.g. Redis) behind this if you scale out.
-    """
-
-    def __init__(self, max_failures: int = 5, window_seconds: int = 15 * 60):
-        self.max_failures = max_failures
-        self.window = window_seconds
-        self._fails: dict[str, deque] = defaultdict(deque)
-        self._lock = threading.Lock()
-
-    def _prune(self, key: str, now: float) -> deque:
-        q = self._fails[key]
-        while q and now - q[0] > self.window:
-            q.popleft()
-        return q
-
-    def retry_after(self, key: str) -> int:
-        with self._lock:
-            now = time.monotonic()
-            q = self._prune(key, now)
-            if len(q) >= self.max_failures:
-                return int(self.window - (now - q[0])) + 1
-            return 0
-
-    def fail(self, key: str) -> None:
-        with self._lock:
-            self._prune(key, time.monotonic()).append(time.monotonic())
-
-    def reset(self, key: str) -> None:
-        with self._lock:
-            self._fails.pop(key, None)
-
-
-login_throttle = LoginThrottle()
 
 
 # ----------------------------------------------------------------- sessions

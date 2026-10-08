@@ -17,7 +17,9 @@ pool = ConnectionPool(
     settings.database_url,
     min_size=1,
     max_size=settings.db_pool_max,
-    kwargs={"row_factory": dict_row},
+    # prepare_threshold=None: no server-side prepared statements, which
+    # transaction poolers in front of hosted Postgres may not support.
+    kwargs={"row_factory": dict_row, "prepare_threshold": None},
     open=False,
 )
 
@@ -27,7 +29,7 @@ def run_migrations() -> None:
 
     An advisory lock keeps two app instances from migrating at once.
     """
-    with psycopg.connect(settings.database_url, autocommit=True) as conn:
+    with psycopg.connect(settings.migration_database_url, autocommit=True) as conn:
         conn.execute("SELECT pg_advisory_lock(%s)", (_MIGRATION_LOCK_ID,))
         try:
             conn.execute(

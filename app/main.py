@@ -1,10 +1,6 @@
 """Ashwheelz feedback server: public form, admin dashboard and JSON API."""
-import hashlib
-import hmac
 import logging
-import threading
-import time
-from collections import defaultdict, deque
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from . import auth, repository
+from . import auth, ratelimit, repository
 from .config import settings
 from .db import pool, run_migrations
 from .export import build_workbook
@@ -77,30 +73,18 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": msg, "field": field}, status_code=422)
 
 
+ON_VERCEL = bool(os.getenv("VERCEL"))
+
+
 def client_ip(request: Request) -> str | None:
+    # On Vercel the edge network sets these headers and overwrites any value a
+    # visitor sends, so they can be trusted there. Elsewhere uvicorn's
+    # --proxy-headers has already put the real address in request.client.
+    if ON_VERCEL:
+        ip = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if ip:
+            return ip
     return request.client.host if request.client else None
-
-
-# ------------------------------------------------------------ rate limiting
-class RateLimit:
-    def __init__(self, limit: int, window_seconds: int):
-        self.limit, self.window = limit, window_seconds
-        self.hits: dict[str, deque] = defaultdict(deque)
-        self.lock = threading.Lock()
-
-    def allow(self, key: str) -> bool:
-        now = time.monotonic()
-        with self.lock:
-            q = self.hits[key]
-            while q and now - q[0] > self.window:
-                q.popleft()
-            if len(q) >= self.limit:
-                return False
-            q.append(now)
-            return True
-
-
-submit_limit = RateLimit(limit=10, window_seconds=600)
 
 
 # -------------------------------------------------------------------- pages
@@ -136,11 +120,11 @@ def get_form():
 @app.post("/api/feedback", status_code=201)
 def submit_feedback(payload: FeedbackIn, request: Request):
     ip = client_ip(request) or "unknown"
-    if not submit_limit.allow(ip):
+    if not ratelimit.allow(ratelimit.SUBMIT, ip, limit=10, window_seconds=600):
         raise HTTPException(429, "Too many submissions from this connection. Please try again in a few minutes.")
     if payload.website:  # honeypot filled: pretend success, store nothing
         return {"reference": "AW-000000-RECVD0"}
-    ip_hash = hmac.new(settings.secret_key.encode(), ip.encode(), hashlib.sha256).hexdigest()
+    ip_hash = ratelimit.key_for(ip)
     try:
         ref = repository.create_feedback(
             payload, settings.form_slug, ip_hash, request.headers.get("user-agent")
@@ -154,15 +138,15 @@ def submit_feedback(payload: FeedbackIn, request: Request):
 @app.post("/api/admin/login")
 def login(body: LoginIn, request: Request, response: Response):
     ip = client_ip(request) or "unknown"
-    wait = auth.login_throttle.retry_after(ip)
+    wait = ratelimit.retry_after(ratelimit.LOGIN_FAIL, ip, limit=5, window_seconds=15 * 60)
     if wait:
         raise HTTPException(429, f"Too many failed sign-ins. Try again in {max(1, wait // 60)} minutes.")
     admin = auth.authenticate(body.username, body.password)
     if admin is None:
-        auth.login_throttle.fail(ip)
+        ratelimit.record(ratelimit.LOGIN_FAIL, ip)
         log.warning("Failed admin sign-in for '%s' from %s", body.username[:50], ip)
         raise HTTPException(401, "Wrong username or password.")
-    auth.login_throttle.reset(ip)
+    ratelimit.clear(ratelimit.LOGIN_FAIL, ip)
     token = auth.create_session(admin["id"], client_ip(request), request.headers.get("user-agent"))
     response.set_cookie(
         auth.SESSION_COOKIE, token, max_age=settings.session_hours * 3600, httponly=True,

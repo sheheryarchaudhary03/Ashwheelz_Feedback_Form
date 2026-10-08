@@ -18,7 +18,24 @@ until that password is changed. Use **Change password** in the dashboard straigh
 after your first sign-in: with `1234`, anyone who guesses it can read every customer's
 name, phone number and comments.
 
-## Deploy (Render, about 10 minutes)
+## Deploy on Vercel
+
+1. On [vercel.com](https://vercel.com): **Add New → Project**, import
+   `Ashwheelz_Feedback_Form` from GitHub. Leave the framework as detected (FastAPI)
+   and do not deploy yet if it offers; or let the first deploy fail, which is fine.
+2. In the project: **Storage → Create Database → Neon (Postgres)**, and connect it to
+   the project. This adds `DATABASE_URL` and `DATABASE_URL_UNPOOLED` automatically.
+3. **Settings → Environment Variables**, add:
+   - `SECRET_KEY`: a long random string
+     (`python -c "import secrets; print(secrets.token_hex(32))"`)
+   - `ADMIN_PASSWORD`: the first admin password
+   - `APP_TIMEZONE`: `Asia/Karachi` (or your time zone)
+4. **Deployments → Redeploy**. Tables are created on the first request.
+5. Share `https://<your-project>.vercel.app/` with customers; sign in at `/admin`.
+
+Every push to `main` redeploys automatically.
+
+## Deploy on Render
 
 1. Push this repository to GitHub (already done).
 2. On [render.com](https://render.com): **New → Blueprint**, pick this repository.
@@ -111,8 +128,8 @@ already run.
 - Strict Content-Security-Policy and security headers on every page.
 - Customer IPs are stored only as a keyed hash (for abuse checks). Submissions are
   limited to 10 per IP per 10 minutes, with a hidden spam trap field.
-- Login and submit limits are kept in memory, so they apply per server instance.
-  Run one instance, or move them to Redis if you scale out.
+- Sign-in lockouts and submission limits are stored in PostgreSQL, so they hold
+  across every server instance.
 
 ## Tests
 
