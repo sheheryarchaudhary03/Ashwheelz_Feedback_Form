@@ -1,4 +1,5 @@
 """Settings read from environment variables (see .env.example)."""
+import hashlib
 import os
 from dataclasses import dataclass
 
@@ -29,9 +30,13 @@ def load_settings() -> Settings:
     if not database_url:
         raise RuntimeError("DATABASE_URL is not set. Copy .env.example to .env and fill it in.")
     secret_key = os.getenv("SECRET_KEY", "").strip()
-    if len(secret_key) < 16:
+    if not secret_key:
+        # No SECRET_KEY given: derive one from the database URL, which is itself
+        # secret (it holds the DB password) and identical on every instance.
+        secret_key = hashlib.sha256(b"ashwheelz-secret-key:" + database_url.encode()).hexdigest()
+    elif len(secret_key) < 16:
         raise RuntimeError(
-            "SECRET_KEY must be set to a long random string (every server instance needs the same one). "
+            "SECRET_KEY is too short. Use a long random string, or remove it to derive one automatically. "
             'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
     return Settings(

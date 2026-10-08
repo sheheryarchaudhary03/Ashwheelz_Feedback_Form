@@ -26,8 +26,9 @@ name, phone number and comments.
 2. In the project: **Storage → Create Database → Neon (Postgres)**, and connect it to
    the project. This adds `DATABASE_URL` and `DATABASE_URL_UNPOOLED` automatically.
 3. **Settings → Environment Variables**, add:
-   - `SECRET_KEY`: a long random string
-     (`python -c "import secrets; print(secrets.token_hex(32))"`)
+   - `SECRET_KEY` (optional): a long random string
+     (`python -c "import secrets; print(secrets.token_hex(32))"`). If unset, one is
+     derived from `DATABASE_URL`.
    - `ADMIN_PASSWORD`: the first admin password
    - `APP_TIMEZONE`: `Asia/Karachi` (or your time zone)
 4. **Deployments → Redeploy**. Tables are created on the first request.
