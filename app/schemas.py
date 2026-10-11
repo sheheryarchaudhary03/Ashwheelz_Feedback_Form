@@ -25,11 +25,11 @@ def _blank_to_none(v):
 
 class CustomerIn(_Model):
     name: str = Field(min_length=1, max_length=120)
-    company: str | None = Field(default=None, max_length=160)
+    company: str = Field(min_length=1, max_length=160)
     phone: str | None = Field(default=None, max_length=30)
     email: str | None = Field(default=None, max_length=254)
 
-    _blanks = field_validator("company", "phone", "email", mode="before")(_blank_to_none)
+    _blanks = field_validator("phone", "email", mode="before")(_blank_to_none)
 
     @field_validator("email")
     @classmethod
@@ -59,12 +59,14 @@ class AnswerIn(_Model):
 class FeedbackIn(_Model):
     customer: CustomerIn
     service_type_id: int | None = Field(default=None, ge=1)
+    # Typed by the customer when the chosen service needs it ("Other (Please Specify)").
+    service_other: str | None = Field(default=None, max_length=200)
     answers: list[AnswerIn] = Field(default_factory=list, max_length=200)
     other_suggestions: str | None = Field(default=None, max_length=4000)
     # Honeypot: hidden from people, bots tend to fill it.
     website: str | None = Field(default=None, max_length=200)
 
-    _blanks = field_validator("other_suggestions", "website", mode="before")(_blank_to_none)
+    _blanks = field_validator("service_other", "other_suggestions", "website", mode="before")(_blank_to_none)
 
 
 class LoginIn(_Model):

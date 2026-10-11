@@ -42,16 +42,22 @@ def _reset_limits(client):
 
 
 def test_submit_rate_limit(client):
-    bad = {"customer": {"name": "x"}}
+    bad = {"customer": {"name": "x", "company": "c"}}
     codes = [client.post("/api/feedback", json=bad).status_code for _ in range(11)]
     assert codes[:10] == [422] * 10 and codes[10] == 429
+
+
+def svc(name):
+    """Id of a service type by name (ids depend on migration order)."""
+    with psycopg.connect(TEST_DB) as c:
+        return c.execute("SELECT id FROM service_types WHERE name = %s", (name,)).fetchone()[0]
 
 
 def good_payload(**over):
     p = {
         "customer": {"name": "Ali Raza", "company": "Raza Traders", "phone": "+92 300 1234567",
                      "email": "ali@example.com"},
-        "service_type_id": 1,
+        "service_type_id": svc("Heavy Vehicle Rental"),
         "answers": [
             {"question_code": "timeliness", "value": 4, "suggestion": "Driver came 10 min early"},
             {"question_code": "driver_professionalism", "value": 5},
@@ -79,7 +85,9 @@ def test_form_is_served_from_database(client):
     assert codes == ["overall", "timeliness", "driver_professionalism", "safety_standards",
                      "vehicle_cleanliness", "customer_support", "nps"]
     assert form["title"] == "Help Us Serve You Better"
-    assert len(form["services"]) == 7
+    names = [s["name"] for s in form["services"]]
+    assert names[0] == "Heavy Vehicle Rental" and names[-1] == "Other (Please Specify)" and len(names) == 10
+    assert [s["requires_detail"] for s in form["services"]].count(True) == 1
     assert client.get("/").status_code == 200
     assert "Content-Security-Policy" in client.get("/").headers
 
@@ -102,9 +110,11 @@ def test_submit_and_reference(client):
     ({"answers": [{"question_code": "overall", "value": 5}, {"question_code": "nope", "value": 1}]}, "Unknown question"),
     ({"answers": [{"question_code": "overall", "value": 5}, {"question_code": "overall", "value": 4}]}, "twice"),
     ({"service_type_id": 999}, "service"),
-    ({"customer": {"name": ""}}, "at least 1"),
-    ({"customer": {"name": "X", "email": "not-an-email"}}, "valid email"),
-    ({"customer": {"name": "X"}, "extra": 1}, "Extra inputs"),
+    ({"customer": {"name": "", "company": "C"}}, "at least 1"),
+    ({"customer": {"name": "X"}}, "required"),
+    ({"customer": {"name": "X", "company": "  "}}, "at least 1"),
+    ({"customer": {"name": "X", "company": "C", "email": "not-an-email"}}, "valid email"),
+    ({"customer": {"name": "X", "company": "C"}, "extra": 1}, "Extra inputs"),
 ])
 def test_submission_validation(client, change, msg):
     r = client.post("/api/feedback", json=good_payload(**change))
@@ -113,7 +123,7 @@ def test_submission_validation(client, change, msg):
 
 
 def test_same_email_reuses_customer_without_overwriting(client):
-    client.post("/api/feedback", json=good_payload(customer={"name": "Someone Else", "email": "ALI@example.com"}))
+    client.post("/api/feedback", json=good_payload(customer={"name": "Someone Else", "company": "Else Co", "email": "ALI@example.com"}))
     with psycopg.connect(TEST_DB) as c:
         rows = c.execute("SELECT name FROM customers WHERE lower(email) = 'ali@example.com'").fetchall()
     assert rows == [("Ali Raza",)]
@@ -158,7 +168,8 @@ def test_login_list_search_filter_detail_status(client):
     assert client.get("/api/admin/me").json()["default_password"] is True
 
     client.post("/api/feedback", json=good_payload(
-        customer={"name": "Sara Khan", "phone": "0321-7654321"}, service_type_id=4,
+        customer={"name": "Sara Khan", "company": "Khan Builders", "phone": "0321-7654321"},
+        service_type_id=svc("Trailer Rental"),
         answers=[{"question_code": "overall", "value": 2, "suggestion": "Truck smelled of fish"},
                  {"question_code": "vehicle_cleanliness", "value": 1}]))
 
@@ -169,8 +180,8 @@ def test_login_list_search_filter_detail_status(client):
     assert client.get("/api/admin/feedback", params={"q": "100%_"}).json()["total"] == 0
     low = client.get("/api/admin/feedback", params={"rating_max": 2}).json()
     assert {i["customer_name"] for i in low["items"]} == {"Sara Khan"}
-    svc = client.get("/api/admin/feedback", params={"service_id": 4}).json()
-    assert svc["total"] == 1
+    by_svc = client.get("/api/admin/feedback", params={"service_id": svc("Trailer Rental")}).json()
+    assert by_svc["total"] == 1
     assert client.get("/api/admin/feedback", params={"rating_min": 9}).status_code == 422
     assert client.get("/api/admin/feedback", params={"date_from": "2000-01-01", "date_to": "2000-01-02"}).json()["total"] == 0
 
@@ -195,7 +206,7 @@ def test_cross_site_admin_write_blocked(client):
 def test_excel_export(client):
     login(client)
     client.post("/api/feedback", json=good_payload(
-        customer={"name": "=HYPERLINK(\"http://x\",\"click\")"},
+        customer={"name": "=HYPERLINK(\"http://x\",\"click\")", "company": "=1+2"},
         other_suggestions="=1+1"))
     r = client.get("/api/admin/export.xlsx")
     assert r.status_code == 200
@@ -229,3 +240,28 @@ def test_change_password_and_logout(client):
     assert client.get("/api/admin/me").status_code == 401
     assert login(client, "1234").status_code == 401
     assert login(client, "Truck2026x").status_code == 200
+
+
+def test_other_service_needs_text(client):
+    other = svc("Other (Please Specify)")
+    r = client.post("/api/feedback", json=good_payload(service_type_id=other))
+    assert r.status_code == 422 and "which service" in r.json()["detail"]
+    r = client.post("/api/feedback", json=good_payload(service_type_id=other, service_other="Generator hire"))
+    assert r.status_code == 201
+    # Text for a normal service is ignored, not stored.
+    client.post("/api/feedback", json=good_payload(service_other="ignored text"))
+    with psycopg.connect(TEST_DB) as c:
+        assert c.execute("SELECT count(*) FROM feedback_responses WHERE service_other = 'ignored text'").fetchone()[0] == 0
+    login(client)
+    item = client.get("/api/admin/feedback", params={"q": "Generator hire"}).json()["items"][0]
+    assert item["service"] == "Other (Please Specify): Generator hire"
+
+
+def test_old_services_rejected_but_listed_for_filters(client):
+    old = svc("Full truck load (FTL)")
+    r = client.post("/api/feedback", json=good_payload(service_type_id=old))
+    assert r.status_code == 422
+    login(client)
+    services = client.get("/api/admin/meta").json()["services"]
+    assert services[0]["is_active"] and not services[-1]["is_active"]
+    assert any(s["name"] == "Full truck load (FTL)" for s in services)

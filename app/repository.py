@@ -35,7 +35,7 @@ def get_form(slug: str) -> dict | None:
             (form["id"],),
         ).fetchall()
         services = conn.execute(
-            "SELECT id, name FROM service_types WHERE is_active ORDER BY sort_order, name"
+            "SELECT id, name, requires_detail FROM service_types WHERE is_active ORDER BY sort_order, name"
         ).fetchall()
 
     sections: list[dict] = []
@@ -68,7 +68,10 @@ def all_questions(form_id: int) -> list[dict]:
 
 def list_services() -> list[dict]:
     with pool.connection() as conn:
-        return conn.execute("SELECT id, name FROM service_types ORDER BY sort_order, name").fetchall()
+        # Current services first; retired ones stay listed for filtering old responses.
+        return conn.execute(
+            "SELECT id, name, is_active FROM service_types ORDER BY is_active DESC, sort_order, name"
+        ).fetchall()
 
 
 # ------------------------------------------------------------- submission
@@ -155,12 +158,18 @@ def create_feedback(payload: FeedbackIn, form_slug: str, ip_hash: str | None, us
         }
         answers = _validate_answers(payload, questions)
 
+        service_other = None
         if payload.service_type_id is not None:
-            ok = conn.execute(
-                "SELECT 1 FROM service_types WHERE id = %s AND is_active", (payload.service_type_id,)
+            svc = conn.execute(
+                "SELECT requires_detail FROM service_types WHERE id = %s AND is_active",
+                (payload.service_type_id,),
             ).fetchone()
-            if not ok:
+            if not svc:
                 raise FeedbackError("Pick a service from the list.")
+            if svc["requires_detail"]:
+                if not payload.service_other:
+                    raise FeedbackError("Please tell us which service you used.")
+                service_other = payload.service_other
 
         c = payload.customer
         phone_digits = re.sub(r"\D", "", c.phone or "") or None
@@ -175,11 +184,11 @@ def create_feedback(payload: FeedbackIn, form_slug: str, ip_hash: str | None, us
                     with conn.transaction():
                         response_id = conn.execute(
                             "INSERT INTO feedback_responses (reference_code, form_id, customer_id, "
-                            " service_type_id, customer_name, customer_company, customer_phone, "
+                            " service_type_id, service_other, customer_name, customer_company, customer_phone, "
                             " customer_email, overall_rating, nps_score, other_suggestions, "
                             " ip_hash, user_agent) "
-                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                            (ref, form["id"], customer_id, payload.service_type_id, c.name,
+                            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+                            (ref, form["id"], customer_id, payload.service_type_id, service_other, c.name,
                              c.company, c.phone, c.email, overall, nps, payload.other_suggestions,
                              ip_hash, (user_agent or "")[:500] or None),
                         ).fetchone()["id"]
@@ -205,10 +214,11 @@ def _where(f: FeedbackFilters) -> tuple[str, list]:
         clauses.append(
             "(r.customer_name ILIKE %s OR r.customer_company ILIKE %s OR r.customer_email ILIKE %s"
             " OR r.customer_phone ILIKE %s OR r.reference_code ILIKE %s OR r.other_suggestions ILIKE %s"
+            " OR r.service_other ILIKE %s"
             " OR EXISTS (SELECT 1 FROM feedback_answers a WHERE a.response_id = r.id"
             "            AND a.suggestion ILIKE %s))"
         )
-        args += [like] * 7
+        args += [like] * 8
     if f.date_from:
         clauses.append("r.submitted_at >= (%s::date)::timestamp AT TIME ZONE %s")
         args += [f.date_from, settings.timezone]
@@ -240,7 +250,7 @@ SORTS = {
 _LIST_COLUMNS = (
     "r.id, r.reference_code, r.submitted_at, r.status, r.customer_name, r.customer_company, "
     "r.customer_phone, r.customer_email, r.overall_rating, r.nps_score, r.other_suggestions, "
-    "r.form_id, s.name AS service"
+    "r.form_id, concat_ws(': ', s.name, r.service_other) AS service"
 )
 
 

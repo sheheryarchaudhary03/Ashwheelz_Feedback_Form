@@ -277,7 +277,7 @@ def export_xlsx(f: FeedbackFilters = Depends(filters_dep), admin=Depends(auth.cu
         raise HTTPException(404, "This feedback form is not available.")
     rows, answers = repository.export_rows(f)
     data = build_workbook(rows, answers, repository.all_questions(form["id"]),
-                          repository.stats(f), _filters_label(f, form["services"]))
+                          repository.stats(f), _filters_label(f, repository.list_services()))
     stamp = datetime.now(ZoneInfo(settings.timezone)).strftime("%Y%m%d-%H%M")
     return Response(
         data,

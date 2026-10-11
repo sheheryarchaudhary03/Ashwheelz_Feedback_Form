@@ -70,7 +70,7 @@
       state.services = m.services;
       var sel = $('fservice');
       while (sel.options.length > 1) sel.remove(1);
-      m.services.forEach(function (s) { sel.appendChild(el('option', { value: String(s.id) }, s.name)); });
+      m.services.forEach(function (s) { sel.appendChild(el('option', { value: String(s.id) }, s.is_active ? s.name : s.name + ' (old)')); });
     });
     refresh();
   }

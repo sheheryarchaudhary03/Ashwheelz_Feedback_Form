@@ -128,14 +128,16 @@
     <div class="card grid">
       <label class="f"><span>Your name <span class="req" aria-hidden="true">*</span></span>
         <input type="text" id="c_name" maxlength="120" required autocomplete="name"></label>
-      <label class="f">Company (optional)
-        <input type="text" id="c_company" maxlength="160" autocomplete="organization"></label>
+      <label class="f"><span>Company name <span class="req" aria-hidden="true">*</span></span>
+        <input type="text" id="c_company" maxlength="160" required autocomplete="organization"></label>
       <label class="f">Phone number (optional)
         <input type="tel" id="c_phone" maxlength="30" autocomplete="tel"></label>
       <label class="f">Email (optional)
         <input type="email" id="c_email" maxlength="254" autocomplete="email"></label>
       <label class="f">Service used (optional)
         <select id="c_service"><option value="">Select a service</option></select></label>
+      <label class="f" id="c_service_other_wrap" hidden><span>Which service did you use? <span class="req" aria-hidden="true">*</span></span>
+        <input type="text" id="c_service_other" maxlength="200" placeholder="Please specify"></label>
     </div>
     <label class="hp" aria-hidden="true">Website <input type="text" id="website" tabindex="-1" autocomplete="off"></label>
 

@@ -80,7 +80,16 @@
     FORM = form;
     document.getElementById('formTitle').textContent = form.title;
     var sel = document.getElementById('c_service');
-    form.services.forEach(function (s) { sel.appendChild(el('option', { value: String(s.id) }, s.name)); });
+    form.services.forEach(function (s) {
+      var o = el('option', { value: String(s.id) }, s.name);
+      if (s.requires_detail) o.setAttribute('data-detail', '1');
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', function () {
+      var wrap = document.getElementById('c_service_other_wrap');
+      wrap.hidden = !needsServiceDetail();
+      if (!wrap.hidden) document.getElementById('c_service_other').focus();
+    });
 
     var root = document.getElementById('sections');
     root.textContent = '';
@@ -104,6 +113,11 @@
     return r ? r.value : null;
   }
   function val(id) { return document.getElementById(id).value.trim(); }
+  function needsServiceDetail() {
+    var sel = document.getElementById('c_service');
+    var o = sel.options[sel.selectedIndex];
+    return !!(o && o.getAttribute('data-detail'));
+  }
 
   function collect() {
     var answers = [];
@@ -116,8 +130,9 @@
       });
     });
     return {
-      customer: { name: val('c_name'), company: val('c_company') || null, phone: val('c_phone') || null, email: val('c_email') || null },
+      customer: { name: val('c_name'), company: val('c_company'), phone: val('c_phone') || null, email: val('c_email') || null },
       service_type_id: val('c_service') ? Number(val('c_service')) : null,
+      service_other: needsServiceDetail() ? (val('c_service_other') || null) : null,
       answers: answers,
       other_suggestions: val('final_sugg') || null,
       website: val('website') || null
@@ -128,6 +143,10 @@
     var problems = [];
     var name = document.getElementById('c_name');
     if (!name.value.trim()) problems.push(name);
+    var company = document.getElementById('c_company');
+    if (!company.value.trim()) problems.push(company);
+    var other = document.getElementById('c_service_other');
+    if (needsServiceDetail() && !other.value.trim()) problems.push(other);
     var email = document.getElementById('c_email');
     if (email.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) problems.push(email);
     FORM.sections.forEach(function (sec) {
@@ -152,7 +171,7 @@
     showError('');
     var problems = validate();
     if (problems.length) {
-      showError('Please add your name and rate your overall experience (and check your email, if you entered one).');
+      showError('Please complete the fields marked * (and check your email, if you entered one).');
       problems[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
       if (problems[0].focus) problems[0].focus({ preventScroll: true });
       return;
