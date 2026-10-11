@@ -53,9 +53,9 @@ def good_payload(**over):
                      "email": "ali@example.com"},
         "service_type_id": 1,
         "answers": [
-            {"question_code": "pickup_time", "value": 4, "suggestion": "Driver came 10 min early"},
-            {"question_code": "delivery_time", "value": 5, "detail": "On time"},
-            {"question_code": "goods_condition", "value": "Perfect condition"},
+            {"question_code": "timeliness", "value": 4, "suggestion": "Driver came 10 min early"},
+            {"question_code": "driver_professionalism", "value": 5},
+            {"question_code": "safety_standards", "value": 5},
             {"question_code": "overall", "value": 5},
             {"question_code": "nps", "value": 9},
         ],
@@ -76,7 +76,9 @@ def test_form_is_served_from_database(client):
     assert r.status_code == 200
     form = r.json()
     codes = [q["code"] for s in form["sections"] for q in s["questions"]]
-    assert "overall" in codes and "driver_behaviour" in codes and len(codes) == 19
+    assert codes == ["overall", "timeliness", "driver_professionalism", "safety_standards",
+                     "vehicle_cleanliness", "customer_support", "nps"]
+    assert form["title"] == "Help Us Serve You Better"
     assert len(form["services"]) == 7
     assert client.get("/").status_code == 200
     assert "Content-Security-Policy" in client.get("/").headers
@@ -89,11 +91,14 @@ def test_submit_and_reference(client):
 
 
 @pytest.mark.parametrize("change,msg", [
-    ({"answers": [{"question_code": "pickup_time", "value": 4}]}, "Please answer"),
+    ({"answers": [{"question_code": "timeliness", "value": 4}]}, "Please answer"),
     ({"answers": [{"question_code": "overall", "value": 6}]}, "score from 1 to 5"),
     ({"answers": [{"question_code": "overall", "value": True}]}, "valid"),
     ({"answers": [{"question_code": "overall", "value": 5},
-                  {"question_code": "goods_condition", "value": "Exploded"}]}, "listed options"),
+                  {"question_code": "timeliness", "value": 4, "detail": "Exploded"}]}, "listed options"),
+    # Retired questions are no longer accepted.
+    ({"answers": [{"question_code": "overall", "value": 5},
+                  {"question_code": "pickup_time", "value": 4}]}, "Unknown question"),
     ({"answers": [{"question_code": "overall", "value": 5}, {"question_code": "nope", "value": 1}]}, "Unknown question"),
     ({"answers": [{"question_code": "overall", "value": 5}, {"question_code": "overall", "value": 4}]}, "twice"),
     ({"service_type_id": 999}, "service"),
@@ -155,7 +160,7 @@ def test_login_list_search_filter_detail_status(client):
     client.post("/api/feedback", json=good_payload(
         customer={"name": "Sara Khan", "phone": "0321-7654321"}, service_type_id=4,
         answers=[{"question_code": "overall", "value": 2, "suggestion": "Truck smelled of fish"},
-                 {"question_code": "vehicle_hygiene", "value": 1}]))
+                 {"question_code": "vehicle_cleanliness", "value": 1}]))
 
     all_ = client.get("/api/admin/feedback").json()
     assert all_["total"] >= 3
@@ -171,7 +176,7 @@ def test_login_list_search_filter_detail_status(client):
 
     rid = found["items"][0]["id"]
     detail = client.get(f"/api/admin/feedback/{rid}").json()
-    hyg = next(a for a in detail["answers"] if a["code"] == "vehicle_hygiene")
+    hyg = next(a for a in detail["answers"] if a["code"] == "vehicle_cleanliness")
     assert hyg["rating"] == 1
     assert client.patch(f"/api/admin/feedback/{rid}", json={"status": "actioned"}).status_code == 200
     assert client.patch(f"/api/admin/feedback/{rid}", json={"status": "deleted"}).status_code == 422

@@ -90,10 +90,10 @@
       sec.questions.forEach(function (q) { route.appendChild(buildQuestion(q)); });
       root.appendChild(route);
     });
-    root.appendChild(el('div', { 'class': 'section-title' }, 'Anything else?'));
+    root.appendChild(el('div', { 'class': 'section-title' }, 'Final Suggestion'));
     var last = el('div', { 'class': 'card' });
-    var lab = el('label', { 'class': 'f' }, 'Any other suggestions for Ashwheelz?');
-    lab.appendChild(el('textarea', { id: 'final_sugg', rows: '4', maxlength: '4000', placeholder: 'Ideas, complaints or compliments. We read every one.' }));
+    var lab = el('label', { 'class': 'f' }, 'Any additional feedback or suggestions?');
+    lab.appendChild(el('textarea', { id: 'final_sugg', rows: '4', maxlength: '4000', placeholder: 'Tell us anything else we can do better.' }));
     last.appendChild(lab);
     root.appendChild(last);
     document.getElementById('goBtn').disabled = false;
@@ -152,7 +152,7 @@
     showError('');
     var problems = validate();
     if (problems.length) {
-      showError('Please add your name and an overall rating (and check your email, if you entered one).');
+      showError('Please add your name and rate your overall experience (and check your email, if you entered one).');
       problems[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
       if (problems[0].focus) problems[0].focus({ preventScroll: true });
       return;
